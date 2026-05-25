@@ -1,17 +1,15 @@
 <template>
   <el-menu
+    class="app-nav"
     :default-active="activeMenu"
     mode="horizontal"
-    background-color="#409eff"
-    text-color="#fff"
-    active-text-color="#ffd04b"
     @select="handleSelect"
   >
-    <el-menu-item index="brand" style="font-size:18px;font-weight:bold;cursor:default;opacity:1;color:#fff;">
+    <el-menu-item index="brand" class="app-nav__brand">
       <el-icon><House /></el-icon>
       AI家政双向信任匹配平台
     </el-menu-item>
-    <div style="flex:1"></div>
+    <div class="app-nav__spacer"></div>
     <template v-for="item in menuItems" :key="item.index">
       <el-menu-item :index="item.index">
         <el-icon><component :is="item.icon" /></el-icon>

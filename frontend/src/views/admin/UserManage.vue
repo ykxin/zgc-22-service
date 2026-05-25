@@ -56,34 +56,89 @@
         v-model:current-page="page" @current-change="fetchUsers"
       />
 
-      <!-- 资质审核子模块 -->
       <div class="page-header mt-16"><h2>资质审核</h2></div>
       <el-table :data="certifications" stripe v-loading="certLoading">
         <el-table-column prop="id" label="ID" width="60" />
         <el-table-column prop="user_id" label="用户ID" width="80" />
-        <el-table-column prop="cert_type" label="证件类型" width="100">
+        <el-table-column label="材料类型" min-width="140">
+          <template #default="{ row }">{{ row.doc_name || certTypeText(row.cert_type) }}</template>
+        </el-table-column>
+        <el-table-column prop="cert_number" label="证件编号" min-width="150" />
+        <el-table-column prop="real_name" label="姓名" width="90" />
+        <el-table-column prop="expire_date" label="有效期" width="120" />
+        <el-table-column label="AI置信度" width="100">
+          <template #default="{ row }">{{ row.ai_confidence ? Math.round(row.ai_confidence * 100) + '%' : '-' }}</template>
+        </el-table-column>
+        <el-table-column label="状态" width="90">
           <template #default="{ row }">
-            {{ { id_card: '身份证', health_cert: '健康证', qualification: '资格证' }[row.cert_type] }}
+            <el-tag :type="statusType(row.status)" size="small">{{ statusText(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="cert_number" label="证件编号" />
-        <el-table-column prop="real_name" label="姓名" width="80" />
-        <el-table-column prop="expire_date" label="有效期" width="120" />
-        <el-table-column label="状态" width="80">
+        <el-table-column label="风险提示" min-width="160">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'passed' ? 'success' : row.status === 'rejected' ? 'danger' : 'warning'" size="small">
-              {{ { pending: '待审核', passed: '已通过', expired: '已过期', rejected: '已驳回' }[row.status] }}
+            <el-tag
+              v-for="flag in row.risk_flags || []"
+              :key="flag.code"
+              :type="flag.severity === 'high' ? 'danger' : 'warning'"
+              size="small"
+              style="margin:2px"
+            >
+              {{ flag.code }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="160">
+        <el-table-column label="操作" width="110">
           <template #default="{ row }">
-            <el-button v-if="row.status === 'pending'" type="success" size="small" @click="reviewCert(row, 'passed')">通过</el-button>
-            <el-button v-if="row.status === 'pending'" type="danger" size="small" @click="reviewCert(row, 'rejected')">驳回</el-button>
+            <el-button size="small" type="primary" @click="openReview(row)">审核</el-button>
           </template>
         </el-table-column>
       </el-table>
     </div>
+
+    <el-dialog v-model="reviewDialogVisible" title="资质材料审核" width="720px">
+      <template v-if="selectedCert">
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="材料">{{ selectedCert.doc_name || certTypeText(selectedCert.cert_type) }}</el-descriptions-item>
+          <el-descriptions-item label="状态">{{ statusText(selectedCert.status) }}</el-descriptions-item>
+          <el-descriptions-item label="持有人">{{ selectedCert.real_name || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="证件编号">{{ selectedCert.cert_number || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="发证机构">{{ selectedCert.issuing_authority || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="有效期">{{ selectedCert.expire_date || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="AI置信度">{{ selectedCert.ai_confidence ? Math.round(selectedCert.ai_confidence * 100) + '%' : '-' }}</el-descriptions-item>
+          <el-descriptions-item label="图片路径">{{ selectedCert.image_url || '-' }}</el-descriptions-item>
+        </el-descriptions>
+
+        <div style="margin-top:12px">
+          <el-tag v-for="tag in selectedCert.suggested_tags || []" :key="tag.tag_code" style="margin:2px">
+            {{ tag.tag_name || tag.tag_code }}
+          </el-tag>
+        </div>
+
+        <el-alert
+          v-for="flag in selectedCert.risk_flags || []"
+          :key="flag.code"
+          :title="flag.message"
+          :type="flag.severity === 'high' ? 'error' : 'warning'"
+          show-icon
+          :closable="false"
+          style="margin-top:12px"
+        />
+
+        <el-input
+          v-model="reviewComment"
+          type="textarea"
+          :rows="3"
+          placeholder="审核意见"
+          style="margin-top:16px"
+        />
+      </template>
+      <template #footer>
+        <el-button @click="reviewDialogVisible = false">取消</el-button>
+        <el-button type="warning" @click="reviewCert(selectedCert, 'expired')">标记过期</el-button>
+        <el-button type="danger" @click="reviewCert(selectedCert, 'rejected')">驳回</el-button>
+        <el-button type="success" @click="reviewCert(selectedCert, 'passed')">通过</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -103,6 +158,25 @@ const pageSize = ref(10)
 const filterRole = ref('')
 const certifications = ref([])
 const certLoading = ref(false)
+const reviewDialogVisible = ref(false)
+const selectedCert = ref(null)
+const reviewComment = ref('')
+
+const certTypeMap = {
+  id_card: '身份证实名核验',
+  health_cert: '健康证',
+  health_certificate: '健康证明',
+  qualification: '资格证',
+  no_criminal_record: '无犯罪记录证明',
+  background_check_authorization: '背景核查授权',
+  housekeeping_certificate: '家政服务证书',
+  maternity_matron_certificate: '母婴护理证书',
+  infant_care_certificate: '育婴照护证书',
+  elderly_care_certificate: '养老护理证书',
+  medical_caregiver_certificate: '病患陪护证书',
+  first_aid_certificate: '基础急救证书',
+  insurance_policy: '服务保险',
+}
 
 onMounted(() => { fetchUsers(); fetchCerts() })
 
@@ -131,11 +205,36 @@ async function fetchCerts() {
   } finally { certLoading.value = false }
 }
 
+function openReview(row) {
+  selectedCert.value = row
+  reviewComment.value = row.review_comment || row.reject_reason || ''
+  reviewDialogVisible.value = true
+}
+
 async function reviewCert(row, status) {
+  if (!row) return
   try {
-    await reviewCertApi(row.id, userStore.token, { status })
-    ElMessage.success('已' + (status === 'passed' ? '通过' : '驳回'))
-    fetchCerts()
+    await reviewCertApi(row.id, userStore.token, {
+      status,
+      review_comment: reviewComment.value,
+      reject_reason: status === 'rejected' ? reviewComment.value : undefined,
+    })
+    ElMessage.success('已' + (status === 'passed' ? '通过' : status === 'expired' ? '标记过期' : '驳回'))
+    reviewDialogVisible.value = false
+    await fetchCerts()
+    await fetchUsers()
   } catch { /* ignore */ }
+}
+
+function certTypeText(type) {
+  return certTypeMap[type] || type
+}
+
+function statusText(status) {
+  return { pending: '待审核', passed: '已通过', expired: '已过期', rejected: '已驳回' }[status] || status
+}
+
+function statusType(status) {
+  return status === 'passed' ? 'success' : status === 'rejected' ? 'danger' : status === 'expired' ? 'danger' : 'warning'
 }
 </script>

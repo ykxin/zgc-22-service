@@ -20,6 +20,9 @@
               开始服务
             </el-button>
           </el-form-item>
+          <el-form-item>
+            <el-button @click="loadActiveOrders">刷新订单</el-button>
+          </el-form-item>
         </el-form>
       </div>
 
@@ -106,12 +109,14 @@ const sopSteps = ref([])
 const accepting = ref(false)
 const acceptanceResult = ref(null)
 
-onMounted(async () => {
+onMounted(loadActiveOrders)
+
+async function loadActiveOrders() {
   try {
-    const res = await getOrders(userStore.token, { status: 'accepted', page_size: 50 })
+    const res = await getOrders(userStore.token, { page_size: 50 })
     activeOrders.value = (res.data?.list || []).filter(o => o.status === 'accepted' || o.status === 'in_progress')
   } catch { /* ignore */ }
-})
+}
 
 async function loadSop() {
   const order = activeOrders.value.find(o => o.id === selectedOrderId.value)
