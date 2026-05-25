@@ -5,3 +5,6 @@ backend/uploads/
 backend/.pytest_cache/
 backend/__pycache__/
 tests/
+**/__pycache__/**
+.DS_Store
+checkin*.png

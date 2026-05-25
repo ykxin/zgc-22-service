@@ -40,6 +40,7 @@ class User(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     certifications = relationship("Certification", back_populates="user")
+    qualification_tags = relationship("ProviderQualificationTag", back_populates="provider")
     orders_as_employer = relationship("Order", foreign_keys="Order.employer_id", back_populates="employer")
     orders_as_worker = relationship("Order", foreign_keys="Order.worker_id", back_populates="worker")
 
@@ -57,10 +58,70 @@ class Certification(Base):
     ocr_result = Column(Text)                                                   # OCR识别原始结果JSON
     status = Column(String(20), default="pending")                              # pending/passed/expired/rejected
     reject_reason = Column(String(200))                                         # 驳回原因
+    doc_name = Column(String(128))                                               # 证件/材料名称
+    issuing_authority = Column(String(128))                                      # 发证机构
+    issue_date = Column(String(20))                                              # 签发日期 yyyy-mm-dd
+    verification_source = Column(String(64), default="ai_model")                 # ai_model/human_reviewer/third_party
+    ai_confidence = Column(Float)                                                # AI识别置信度
+    reviewer_id = Column(Integer, ForeignKey("users.id"))                        # 审核人
+    review_comment = Column(Text)                                                # 审核意见
+    extracted_fields = Column(Text)                                              # AI结构化字段JSON
+    suggested_tags = Column(Text)                                                # AI候选标签JSON
+    risk_flags = Column(Text)                                                    # AI风险提示JSON
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     user = relationship("User", back_populates="certifications")
+
+class QualificationTagDefinition(Base):
+    """资质标签定义表"""
+    __tablename__ = "qualification_tag_definition"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    tag_code = Column(String(64), unique=True, nullable=False, index=True)
+    tag_name = Column(String(128), nullable=False)
+    tag_category = Column(String(64), nullable=False)                            # identity/health/skill/credit/performance/service_preference/risk
+    description = Column(Text)
+    display_priority = Column(Integer, default=100)
+    is_sensitive = Column(Integer, default=0)                                    # 0否 1是
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class ProviderQualificationTag(Base):
+    """服务人员资质标签表"""
+    __tablename__ = "provider_qualification_tag"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    provider_id = Column(Integer, ForeignKey("users.id"), nullable=False)         # provider_id 等同从业者 user_id
+    tag_code = Column(String(64), nullable=False, index=True)
+    status = Column(String(32), nullable=False, default="pending")               # active/pending/rejected/expired/warning/revoked
+    trust_level = Column(Integer, nullable=False, default=2)                     # 1-5
+    source_type = Column(String(64))                                             # document/profile/performance/system
+    source_id = Column(Integer)
+    confidence = Column(Float)
+    visible_to_customer = Column(Integer, default=1)                             # 0否 1是
+    valid_from = Column(String(20))
+    valid_until = Column(String(20))
+    generated_by = Column(String(32), default="system_rule")                     # system_rule/ai_model/human_reviewer/third_party_sync
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    provider = relationship("User", back_populates="qualification_tags")
+
+class AiQualificationExtraction(Base):
+    """AI资质材料解析结果表"""
+    __tablename__ = "ai_qualification_extraction"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    document_id = Column(Integer, ForeignKey("certifications.id"), nullable=False)
+    provider_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    model_name = Column(String(64), default="mock-qualification-ocr-v1")
+    extracted_json = Column(Text)
+    suggested_tags = Column(Text)
+    risk_flags = Column(Text)
+    confidence = Column(Float)
+    status = Column(String(32), default="pending_review")
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 class SopTemplate(Base):
     """SOP服务标准模板表"""

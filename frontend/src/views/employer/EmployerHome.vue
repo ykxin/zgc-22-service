@@ -73,7 +73,7 @@
         <el-form-item label="从业者">{{ selectedWorker?.nickname }}</el-form-item>
         <el-form-item label="服务类别">{{ serviceCategory }}</el-form-item>
         <el-form-item label="服务日期">
-          <el-date-picker v-model="bookForm.service_date" type="date" placeholder="选择日期" value-format="YYYY-MM-DD" />
+          <el-date-picker v-model="bookForm.service_date" type="date" placeholder="选择日期" format="YYYY-MM-DD" />
         </el-form-item>
         <el-form-item label="服务时段">
           <el-select v-model="bookForm.service_time" placeholder="选择时段">
@@ -81,6 +81,9 @@
             <el-option label="下午 14:00-18:00" value="下午" />
             <el-option label="全天 8:00-18:00" value="全天" />
           </el-select>
+        </el-form-item>
+        <el-form-item label="服务地址">
+          <el-input v-model="bookForm.address" placeholder="请输入服务地址" />
         </el-form-item>
         <el-form-item label="备注">
           <el-input v-model="bookForm.remark" type="textarea" :rows="2" placeholder="特殊要求说明" />
@@ -96,12 +99,14 @@
 
 <script setup>
 import { ref, reactive } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import NavBar from '../../components/NavBar.vue'
 import { getRecommend, createBooking } from '../../api/matching'
 import { useUserStore } from '../../store/user'
 
 const userStore = useUserStore()
+const router = useRouter()
 const serviceCategory = ref('保洁')
 const loading = ref(false)
 const matches = ref([])
@@ -110,8 +115,9 @@ const booking = ref(false)
 const selectedWorker = ref(null)
 
 const bookForm = reactive({
-  service_date: '',
+  service_date: null,
   service_time: '',
+  address: '',
   remark: '',
 })
 
@@ -125,10 +131,19 @@ async function fetchRecommend() {
 
 function showBookDialog(worker) {
   selectedWorker.value = worker
-  bookForm.service_date = ''
+  bookForm.service_date = null
   bookForm.service_time = ''
+  bookForm.address = userStore.user?.address || ''
   bookForm.remark = ''
   bookVisible.value = true
+}
+
+function formatDate(date) {
+  if (!date) return ''
+  const yyyy = date.getFullYear()
+  const mm = String(date.getMonth() + 1).padStart(2, '0')
+  const dd = String(date.getDate()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}`
 }
 
 async function confirmBooking() {
@@ -136,17 +151,23 @@ async function confirmBooking() {
     ElMessage.warning('请选择服务日期和时段')
     return
   }
+  if (!bookForm.address && !userStore.user?.address) {
+    ElMessage.warning('请填写服务地址')
+    return
+  }
   booking.value = true
   try {
     await createBooking(userStore.token, {
       worker_id: selectedWorker.value.worker_id,
       service_category: serviceCategory.value,
-      service_date: bookForm.service_date,
+      service_date: formatDate(bookForm.service_date),
       service_time: bookForm.service_time,
+      address: bookForm.address || userStore.user?.address || '',
       remark: bookForm.remark,
     })
     ElMessage.success('预约已发送')
     bookVisible.value = false
+    router.push('/employer/orders')
   } finally { booking.value = false }
 }
 </script>

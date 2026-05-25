@@ -5,6 +5,7 @@ from sqlalchemy import func
 from database.database import get_db
 from database.models import User, Order, Dispute, Review, Certification, SopTemplate
 from schemas.certification import CertReview
+from services.certification_service import review_document, serialize_document
 from utils.response import success, error, paginate
 from utils.security import decode_access_token
 
@@ -122,16 +123,7 @@ async def api_cert_list(
     total = query.count()
     certs = query.order_by(Certification.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
 
-    return paginate([{
-        "id": c.id,
-        "user_id": c.user_id,
-        "cert_type": c.cert_type,
-        "cert_number": c.cert_number,
-        "real_name": c.real_name,
-        "expire_date": c.expire_date,
-        "status": c.status,
-        "created_at": str(c.created_at),
-    } for c in certs], total, page, page_size)
+    return paginate([serialize_document(c, include_sensitive=True) for c in certs], total, page, page_size)
 
 
 @router.put("/certifications/{cert_id}/review", summary="审核资质")
@@ -149,11 +141,19 @@ async def api_review_cert(
     if not cert:
         return error("资质不存在", 404)
 
-    cert.status = body.status
-    cert.reject_reason = body.reject_reason
-    db.commit()
+    try:
+        generated_tags = review_document(
+            db,
+            cert,
+            status=body.status,
+            reviewer_id=check_admin(token, db)["user_id"],
+            review_comment=body.review_comment or body.reject_reason,
+            verified_fields=body.verified_fields,
+        )
+    except ValueError as exc:
+        return error(str(exc))
 
-    return success(None, f"资质已{body.status}")
+    return success({"generated_tags": generated_tags}, f"资质已{body.status}")
 
 
 @router.get("/orders", summary="所有订单列表")

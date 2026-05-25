@@ -1,122 +1,88 @@
-"""
-AI OCR证件识别服务（模拟实现）
-实际场景可对接百度OCR、腾讯OCR等API
+"""AI OCR证件识别服务入口。
+
+AI只输出结构化字段、候选标签和风险提示，不直接决定最终审核结论。
 """
 import re
-import random
-import hashlib
-from typing import Tuple
 from datetime import datetime, date
+from typing import Tuple
+
+from services.ocr_providers import get_ocr_provider
+from services.ocr_providers.mock import normalize_doc_type
 
 
-# --- 模拟证件数据库（用于证件真伪校验） ---
-MOCK_VALID_CERTS = {
-    "health_cert": {"no": "JK2024", "org": "市卫生健康委员会"},
-    "qualification": {"no": "ZG2024", "org": "市人力资源和社会保障局"},
+SUPPORTED_DOC_TYPES = {
+    "id_card",
+    "health_cert",
+    "health_certificate",
+    "qualification",
+    "no_criminal_record",
+    "background_check_authorization",
+    "housekeeping_certificate",
+    "maternity_matron_certificate",
+    "infant_care_certificate",
+    "elderly_care_certificate",
+    "medical_caregiver_certificate",
+    "first_aid_certificate",
+    "insurance_policy",
 }
 
 
-def ocr_recognize_id_card(image_data: bytes) -> dict:
-    """
-    模拟身份证OCR识别
-    真实场景：调用OCR API，识别姓名、身份证号、有效期等
-    """
-    # 模拟从图片中识别的结果
-    mock_names = ["张明", "李华", "王芳", "刘洋", "陈静", "赵伟", "孙丽", "周强"]
-    mock_cards = [
-        "320102199003071234", "440106198506152345",
-        "110108199210081456", "330106199507093678",
-    ]
-    name = random.choice(mock_names)
-    id_card = random.choice(mock_cards)
-    gender = "男" if int(id_card[-2]) % 2 else "女"
-    birth = f"{id_card[6:10]}-{id_card[10:12]}-{id_card[12:14]}"
-    # 有效期：签发日(随机过去几年) + 10年
-    issue_year = random.randint(2018, 2023)
-    expire_date = f"{issue_year + 10}-{id_card[10:12]}-{id_card[12:14]}"
-
-    return {
-        "cert_type": "id_card",
-        "real_name": name,
-        "cert_number": id_card,
-        "gender": gender,
-        "birth_date": birth,
-        "expire_date": expire_date,
-        "confidence": round(random.uniform(0.88, 0.99), 2),
-    }
-
-
-def ocr_recognize_health_cert(image_data: bytes) -> dict:
-    """模拟健康证OCR识别"""
-    mock_names = ["张明", "李华", "王芳", "刘洋"]
-    cert_no = f"JK{random.randint(2020, 2025)}{random.randint(100, 999):03d}"
-    expire_date = f"{random.randint(2025, 2027)}-{random.randint(1, 12):02d}-{random.randint(1, 28):02d}"
-    return {
-        "cert_type": "health_cert",
-        "real_name": random.choice(mock_names),
-        "cert_number": cert_no,
-        "expire_date": expire_date,
-        "issuing_authority": "市卫生健康委员会",
-        "confidence": round(random.uniform(0.85, 0.98), 2),
-    }
-
-
-def ocr_recognize_qualification(image_data: bytes) -> dict:
-    """模拟资格证OCR识别"""
-    mock_names = ["张明", "李华", "王芳"]
-    cert_no = f"ZG{random.randint(2020, 2025)}{random.randint(1000, 9999):04d}"
-    mock_skills = ["高级家政师", "母婴护理师", "养老护理员", "保洁工程师"]
-    expire_date = f"{random.randint(2026, 2028)}-{random.randint(1, 12):02d}-{random.randint(1, 28):02d}"
-    return {
-        "cert_type": "qualification",
-        "real_name": random.choice(mock_names),
-        "cert_number": cert_no,
-        "qualification_name": random.choice(mock_skills),
-        "expire_date": expire_date,
-        "issuing_authority": "市人力资源和社会保障局",
-        "confidence": round(random.uniform(0.85, 0.98), 2),
-    }
-
-
-def recognize_certificate(cert_type: str, image_data: bytes) -> dict:
-    """
-    统一证件识别入口
-    根据证件类型调用对应的OCR识别
-    """
-    if cert_type == "id_card":
-        return ocr_recognize_id_card(image_data)
-    elif cert_type == "health_cert":
-        return ocr_recognize_health_cert(image_data)
-    elif cert_type == "qualification":
-        return ocr_recognize_qualification(image_data)
-    else:
+def recognize_certificate(cert_type: str, image_data: bytes, provider=None, declared_doc_name: str | None = None) -> dict:
+    """统一证件识别入口，兼容旧cert_type并返回新结构。"""
+    if cert_type not in SUPPORTED_DOC_TYPES:
         return {"error": "不支持的证件类型"}
+    ocr_provider = get_ocr_provider()
+    return ocr_provider.extract(cert_type, image_data, provider=provider, declared_doc_name=declared_doc_name)
+
+
+def flatten_ocr_result(ocr_result: dict) -> dict:
+    """把新OCR结构转换为旧接口字段，便于旧代码/前端兼容。"""
+    fields = ocr_result.get("extracted_fields", {})
+    return {
+        "cert_type": fields.get("doc_type") or normalize_doc_type(fields.get("cert_type", "")),
+        "real_name": fields.get("holder_name", ""),
+        "cert_number": fields.get("certificate_no", ""),
+        "expire_date": fields.get("expire_date"),
+        "issuing_authority": fields.get("issuing_authority", ""),
+        "doc_name": fields.get("certificate_name", ""),
+        "issue_date": fields.get("issue_date"),
+        "confidence": ocr_result.get("confidence", 0),
+    }
 
 
 def verify_certificate_validity(ocr_result: dict) -> Tuple[bool, str]:
     """
-    AI证件真伪校验逻辑
-    返回 (是否有效, 校验说明)
+    规则引擎层面的基础校验。
+
+    返回False只代表材料不满足最低入库要求；高风险但可人工复核的情况保留为risk_flags。
     """
-    # 1. OCR置信度检查
-    if ocr_result.get("confidence", 0) < 0.80:
+    if ocr_result.get("error"):
+        return False, ocr_result["error"]
+
+    flat = flatten_ocr_result(ocr_result)
+    confidence = flat.get("confidence", 0)
+    if confidence < 0.70:
         return False, "证件识别置信度过低，请重新上传清晰图片"
 
-    # 2. 有效期检查
-    expire_date = ocr_result.get("expire_date", "")
+    expire_date = flat.get("expire_date")
     if expire_date:
         try:
-            exp = datetime.strptime(expire_date, "%Y-%m-%d").date()
-            if exp < date.today():
-                return False, f"证件已过期（有效期至{expire_date}）"
+            datetime.strptime(expire_date, "%Y-%m-%d").date()
         except ValueError:
             return False, "证件日期格式异常"
 
-    # 3. 证件号格式校验
-    cert_type = ocr_result.get("cert_type", "")
-    cert_number = ocr_result.get("cert_number", "")
-    if cert_type == "id_card":
-        if not re.match(r'^\d{17}[\dXx]$', cert_number):
-            return False, "身份证号格式不正确"
+    cert_type = flat.get("cert_type", "")
+    cert_number = flat.get("cert_number", "")
+    if cert_type == "id_card" and not re.match(r"^\d{17}[\dXx]$", cert_number):
+        return False, "身份证号格式不正确"
 
-    return True, "证件校验通过"
+    return True, "AI识别完成，等待人工审核"
+
+
+def is_expired(expire_date: str | None) -> bool:
+    if not expire_date:
+        return False
+    try:
+        return datetime.strptime(expire_date, "%Y-%m-%d").date() < date.today()
+    except ValueError:
+        return False

@@ -10,7 +10,7 @@ import os
 
 from database.database import init_db
 from api.auth import router as auth_router
-from api.certification import router as cert_router
+from api.certification import qualification_router, router as cert_router
 from api.service_standard import router as service_router
 from api.matching import router as match_router
 from api.dispute import router as dispute_router
@@ -46,6 +46,7 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 # 注册路由
 app.include_router(auth_router)
 app.include_router(cert_router)
+app.include_router(qualification_router)
 app.include_router(service_router)
 app.include_router(match_router)
 app.include_router(dispute_router)
