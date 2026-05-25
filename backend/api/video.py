@@ -37,8 +37,8 @@ async def api_upload_video(
     if order.worker_id != payload["user_id"]:
         return error("只有该订单的从业者才能上传视频", 403)
 
-    if order.status not in ("in_progress", "done", "completed"):
-        return error("只有进行中或已完成的订单才能上传视频", 400)
+    if order.status not in ("accepted", "in_progress", "done", "completed"):
+        return error("只有已接单或进行中/已完成的订单才能上传视频", 400)
 
     existing_count = db.query(ServiceVideo).filter(
         ServiceVideo.order_id == order_id

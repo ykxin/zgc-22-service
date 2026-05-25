@@ -9,6 +9,7 @@ import random
 import re
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
+from typing import List, Optional
 
 
 # ---------------------------------------------------------------------------
@@ -46,7 +47,7 @@ def _build_user_prompt(sop_steps: list) -> str:
 # 外部模型调用（阿里云百炼 qwen3-vl-plus）
 # ---------------------------------------------------------------------------
 
-def analyze_video_external(video_path: str, sop_steps: list) -> dict | None:
+def analyze_video_external(video_path: str, sop_steps: list) -> Optional[dict]:
     """
     调用阿里云百炼 qwen3-vl-plus 分析本地视频文件。
     需要环境变量 DASHSCOPE_API_KEY。未配置时返回 None，系统自动降级为 mock。
@@ -109,7 +110,7 @@ def analyze_video_external(video_path: str, sop_steps: list) -> dict | None:
         return None
 
 
-def _parse_model_output(raw: str) -> dict | None:
+def _parse_model_output(raw: str) -> Optional[dict]:
     """从模型输出中提取 JSON，兼容带 markdown 代码块的情况。"""
     # 去掉 ```json ... ``` 包裹
     cleaned = re.sub(r"```(?:json)?\s*", "", raw).replace("```", "").strip()
@@ -208,7 +209,7 @@ def analyze_video(video_path: str, order_id: int, db: Session) -> dict:
 # 恶意差评检测
 # ---------------------------------------------------------------------------
 
-def detect_malicious_review(video_score: float, review_ratings: list) -> bool:
+def detect_malicious_review(video_score: float, review_ratings: List[float]) -> bool:
     """
     判断是否存在恶意差评。
     条件：视频综合评分 >= 80 且存在评价评分 < 3 的记录。
