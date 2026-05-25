@@ -6,7 +6,11 @@ from sqlalchemy.orm import Session
 from database.database import get_db
 from database.models import User, Order, CheckIn, SopTemplate, CustomStandard
 from schemas.service import SopCreate, CustomStandardCreate, CheckInCreate
-from services.sop_service import init_default_sop, ai_acceptance_check, generate_acceptance_report
+from services.sop_service import (
+    init_default_sop,
+    ai_acceptance_check,
+    generate_acceptance_report,
+)
 from utils.response import success, error, paginate
 from utils.security import decode_access_token
 
@@ -80,6 +84,7 @@ async def api_create_custom(body: CustomStandardCreate, token: str, db: Session 
     payload = decode_access_token(token)
     if not payload or payload["role"] != "employer":
         return error("仅雇主可自定义标准", 403)
+
     cs = CustomStandard(employer_id=payload["user_id"], **body.model_dump())
     db.add(cs)
     db.commit()
@@ -164,11 +169,18 @@ async def api_acceptance(order_id: int, token: str, db: Session = Depends(get_db
     # AI验收
     acceptance_result = ai_acceptance_check(order_id, checkins, db)
     report = generate_acceptance_report(acceptance_result)
+    try:
+        report_data = json.loads(report)
+        acceptance_result["service_report"] = report_data.get("服务报告")
+        acceptance_result["report_images"] = report_data.get("证据图片", [])
+    except json.JSONDecodeError:
+        acceptance_result["service_report"] = None
+        acceptance_result["report_images"] = []
 
     # 更新订单
     order.acceptance_score = acceptance_result["total_score"]
     order.acceptance_report = report
-    if acceptance_result["total_score"] >= 60:
+    if acceptance_result["total_score"] >= 0.6:
         order.status = "done"
     db.commit()
 
