@@ -1,8 +1,9 @@
 """AI纠纷公允判定模块API"""
+import json
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from database.database import get_db
-from database.models import Dispute, Order, User
+from database.models import Dispute, Order, ServiceVideo
 from schemas.dispute import DisputeCreate
 from services.arbitration_service import gather_evidence, analyze_dispute, generate_arbitration_report
 from utils.response import success, error
@@ -13,7 +14,7 @@ router = APIRouter(prefix="/api/dispute", tags=["AI纠纷仲裁"])
 
 @router.post("/create", summary="发起纠纷")
 async def api_create_dispute(body: DisputeCreate, token: str, db: Session = Depends(get_db)):
-    """雇主/从业者提交纠纷申请"""
+    """雇主/从业者提交纠纷申请，AI 自动取证并完成判定。"""
     payload = decode_access_token(token)
     if not payload:
         return error("令牌无效", 401)
@@ -22,9 +23,21 @@ async def api_create_dispute(body: DisputeCreate, token: str, db: Session = Depe
     if not order:
         return error("订单不存在", 404)
 
-    # 验证发起人是订单参与方
     if payload["user_id"] not in [order.employer_id, order.worker_id]:
         return error("您不是该订单的参与方", 403)
+
+    if order.status not in ("done", "completed"):
+        return error("只有已完成的订单才能发起纠纷", 400)
+
+    existing = db.query(Dispute).filter(
+        Dispute.order_id == body.order_id,
+        Dispute.status != "executed",
+    ).first()
+    if existing:
+        return error("该订单已有未解决的纠纷，请等待处理完毕后再发起", 400)
+
+    if body.dispute_type == "malicious_review" and payload["user_id"] != order.worker_id:
+        return error("恶意差评纠纷只能由从业者发起", 403)
 
     dispute = Dispute(
         order_id=body.order_id,
@@ -33,22 +46,24 @@ async def api_create_dispute(body: DisputeCreate, token: str, db: Session = Depe
         description=body.description,
     )
     db.add(dispute)
-    db.commit()
-    db.refresh(dispute)
+    db.flush()  # 获取 dispute.id，不提交事务
 
-    # AI自动取证和判定
+    # 纠纷期间锁定该订单所有视频
+    db.query(ServiceVideo).filter(
+        ServiceVideo.order_id == body.order_id
+    ).update({"is_locked": 1})
+
     evidence = gather_evidence(db, body.order_id)
     judgment = analyze_dispute(evidence, body.dispute_type, body.description)
     report = generate_arbitration_report(dispute, evidence, judgment)
 
-    import json
     dispute.evidence = json.dumps(evidence, ensure_ascii=False)
     dispute.ai_judgment = json.dumps(judgment, ensure_ascii=False)
     dispute.responsible_party = judgment["责任方"]
     dispute.suggestion = judgment["处理建议"]
     dispute.status = "judged"
     db.commit()
-
+    # refresh 仅在非测试环境下安全；直接用已有数据构造响应
     return success({
         "dispute_id": dispute.id,
         "evidence": evidence,
@@ -70,7 +85,6 @@ async def api_dispute_list(token: str, db: Session = Depends(get_db)):
         (Dispute.order.has(Order.worker_id == payload["user_id"]))
     ).all()
 
-    import json
     return success([{
         "id": d.id,
         "order_id": d.order_id,
@@ -87,7 +101,7 @@ async def api_dispute_list(token: str, db: Session = Depends(get_db)):
 
 @router.get("/{dispute_id}", summary="纠纷详情")
 async def api_dispute_detail(dispute_id: int, token: str, db: Session = Depends(get_db)):
-    """获取纠纷详情及AI仲裁报告"""
+    """获取纠纷详情及AI仲裁报告，仅订单参与方和管理员可查看。"""
     payload = decode_access_token(token)
     if not payload:
         return error("令牌无效", 401)
@@ -96,7 +110,10 @@ async def api_dispute_detail(dispute_id: int, token: str, db: Session = Depends(
     if not dispute:
         return error("纠纷不存在", 404)
 
-    import json
+    order = dispute.order
+    if payload["user_id"] not in [order.employer_id, order.worker_id] and payload["role"] != "admin":
+        return error("无权查看该纠纷", 403)
+
     return success({
         "id": dispute.id,
         "order_id": dispute.order_id,

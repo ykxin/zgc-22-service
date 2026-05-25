@@ -5,13 +5,16 @@ AI纠纷判定与仲裁服务
 import json
 from datetime import datetime
 from sqlalchemy.orm import Session
-from database.models import Order, CheckIn, Review, ChatRecord, Dispute
+from database.models import Order, CheckIn, Review, ChatRecord, Dispute, ServiceVideo
+from services.video_analysis_service import detect_malicious_review
+
+DAMAGE_KEYWORDS = ["损坏", "坏了", "破了", "摔碎", "划痕", "损毁", "碎了", "弄坏", "打碎"]
 
 
 def gather_evidence(db: Session, order_id: int) -> dict:
     """
     自动取证：收集订单相关的所有数据
-    包括订单信息、验收报告、打卡记录、聊天记录、评价记录
+    包括订单信息、验收报告、打卡记录、聊天记录、评价记录、视频分析结果
     """
     order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
@@ -20,6 +23,13 @@ def gather_evidence(db: Session, order_id: int) -> dict:
     checkins = db.query(CheckIn).filter(CheckIn.order_id == order_id).order_by(CheckIn.step_order).all()
     chats = db.query(ChatRecord).filter(ChatRecord.order_id == order_id).order_by(ChatRecord.created_at).all()
     reviews = db.query(Review).filter(Review.order_id == order_id).all()
+    videos = db.query(ServiceVideo).filter(
+        ServiceVideo.order_id == order_id,
+        ServiceVideo.status == "done",
+    ).all()
+
+    video_scores = [v.video_score for v in videos if v.video_score is not None]
+    avg_video_score = round(sum(video_scores) / len(video_scores), 1) if video_scores else None
 
     evidence = {
         "订单信息": {
@@ -60,6 +70,16 @@ def gather_evidence(db: Session, order_id: int) -> dict:
             }
             for r in reviews
         ],
+        "视频记录": [
+            {
+                "视频ID": v.id,
+                "得分": v.video_score,
+                "状态": v.status,
+                "上传时间": str(v.created_at),
+            }
+            for v in videos
+        ],
+        "视频得分": avg_video_score,
     }
 
     return evidence
@@ -68,14 +88,15 @@ def gather_evidence(db: Session, order_id: int) -> dict:
 def analyze_dispute(evidence: dict, dispute_type: str, description: str) -> dict:
     """
     AI责任判定引擎
-
     根据纠纷类型和证据进行分析，输出责任方和判定理由
     """
     order_info = evidence.get("订单信息", {})
-    acceptance_score = evidence.get("验收得分", 0) or 0
+    raw_score = evidence.get("验收得分")
+    acceptance_score = raw_score  # 保留 None，不强制转 0
     checkins = evidence.get("打卡记录", [])
     chat_records = evidence.get("聊天记录", [])
     reviews = evidence.get("评价记录", [])
+    video_score = evidence.get("视频得分")
 
     total_steps = len(checkins) if checkins else 1
     done_steps = sum(1 for c in checkins if c["完成"] == "是")
@@ -88,16 +109,21 @@ def analyze_dispute(evidence: dict, dispute_type: str, description: str) -> dict
     }
 
     if dispute_type == "service_quality":
-        # 服务质量纠纷判定
         if acceptance_score is not None and acceptance_score < 60:
-            judgment["责任方"] = "worker"
-            judgment["判定理由"] = f"AI验收得分{acceptance_score}分，低于60分合格线，服务未达标"
-            judgment["处理建议"] = "建议从业者免费补服务一次，或退还50%服务费"
+            # 视频评分高时降低处罚力度
+            if video_score is not None and video_score >= 80:
+                judgment["责任方"] = "both"
+                judgment["判定理由"] = f"AI验收得分{acceptance_score}分偏低，但视频评分{video_score}分显示操作规范，存在评分标准差异"
+                judgment["处理建议"] = "建议平台复核验收标准，从业者补做争议项目"
+            else:
+                judgment["责任方"] = "worker"
+                judgment["判定理由"] = f"AI验收得分{acceptance_score}分，低于60分合格线，服务未达标"
+                judgment["处理建议"] = "建议从业者免费补服务一次，或退还50%服务费"
         elif completion_rate < 0.7:
             judgment["责任方"] = "worker"
             judgment["判定理由"] = f"服务步骤完成率仅{completion_rate:.0%}，多项SOP步骤未完成"
             judgment["处理建议"] = "建议按未完成步骤比例退还相应费用"
-        elif acceptance_score and acceptance_score >= 80:
+        elif acceptance_score is not None and acceptance_score >= 80:
             judgment["责任方"] = "employer"
             judgment["判定理由"] = f"AI验收得分{acceptance_score}分，服务达标，雇主投诉依据不足"
             judgment["处理建议"] = "建议驳回纠纷，维持服务完成状态"
@@ -107,21 +133,24 @@ def analyze_dispute(evidence: dict, dispute_type: str, description: str) -> dict
             judgment["处理建议"] = "建议平台协调，从业者补做未达标项目"
 
     elif dispute_type == "salary":
-        # 薪资纠纷判定
         price = order_info.get("金额", 0)
-        if acceptance_score and acceptance_score >= 70:
+        if acceptance_score is None:
+            judgment["责任方"] = "both"
+            judgment["判定理由"] = "订单尚无验收报告，无法量化服务质量"
+            judgment["处理建议"] = "建议平台人工核查后按实际完成情况结算"
+        elif acceptance_score >= 70:
             judgment["责任方"] = "employer"
             judgment["判定理由"] = f"验收得分{acceptance_score}分，服务已完成应正常结算"
             judgment["处理建议"] = f"建议雇主按约定支付{price}元服务费"
         else:
+            pct = acceptance_score / 100
             judgment["责任方"] = "both"
-            judgment["判定理由"] = "服务验收不达标，建议协商调整费用"
-            judgment["处理建议"] = f"建议按验收得分比例支付，应付{max(0, price * (acceptance_score or 0) / 100):.0f}元"
+            judgment["判定理由"] = f"服务验收得分{acceptance_score}分，未达70分结算线"
+            judgment["处理建议"] = f"建议按验收得分比例支付，应付{price * pct:.0f}元"
 
     elif dispute_type == "item_damage":
-        # 物品损耗纠纷
         has_damage_evidence = any(
-            "损坏" in ch.get("内容", "") or "坏了" in ch.get("内容", "")
+            any(kw in ch.get("内容", "") for kw in DAMAGE_KEYWORDS)
             for ch in chat_records
         )
         if has_damage_evidence:
@@ -133,6 +162,18 @@ def analyze_dispute(evidence: dict, dispute_type: str, description: str) -> dict
             judgment["判定理由"] = "无充分证据证明物品损坏责任归属"
             judgment["处理建议"] = "建议双方协商，平台提供调解服务"
 
+    elif dispute_type == "malicious_review":
+        review_ratings = [r.get("评分", 5) for r in reviews]
+        is_malicious = detect_malicious_review(video_score, review_ratings) if video_score is not None else False
+        if is_malicious:
+            judgment["责任方"] = "employer"
+            judgment["判定理由"] = f"视频AI得分{video_score}分（≥80），但评价评分低于3分，疑似恶意差评"
+            judgment["处理建议"] = "建议平台审核该评价，情况属实可予以删除并警告雇主"
+        else:
+            judgment["责任方"] = "both"
+            judgment["判定理由"] = "无充分视频证据支持恶意差评认定" if video_score is None else f"视频得分{video_score}分，不满足恶意差评判定条件"
+            judgment["处理建议"] = "建议平台人工审核评价内容"
+
     else:
         judgment["责任方"] = "both"
         judgment["判定理由"] = "纠纷类型需进一步核实"
@@ -142,9 +183,10 @@ def analyze_dispute(evidence: dict, dispute_type: str, description: str) -> dict
 
 
 def generate_arbitration_report(dispute: Dispute, evidence: dict, judgment: dict) -> str:
-    """
-    生成AI仲裁报告（文本格式）
-    """
+    """生成AI仲裁报告（文本格式）"""
+    video_score = evidence.get("视频得分")
+    video_line = f"  视频AI得分：{video_score}" if video_score is not None else "  视频记录：无"
+
     report_lines = [
         "=" * 50,
         "           AI 仲 裁 报 告",
@@ -161,6 +203,7 @@ def generate_arbitration_report(dispute: Dispute, evidence: dict, judgment: dict
         "",
         "【取证摘要】",
         f"  验收得分：{evidence.get('验收得分', 'N/A')}",
+        video_line,
         f"  打卡记录数：{len(evidence.get('打卡记录', []))}",
         f"  聊天记录数：{len(evidence.get('聊天记录', []))}",
         "",
