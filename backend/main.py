@@ -17,6 +17,7 @@ from api.dispute import router as dispute_router
 from api.order import router as order_router
 from api.review import router as review_router
 from api.admin import router as admin_router
+from api.video import router as video_router
 
 # 创建应用
 app = FastAPI(
@@ -39,6 +40,7 @@ app.add_middleware(
 
 # 静态文件目录（上传的图片等）
 os.makedirs("uploads", exist_ok=True)
+os.makedirs("uploads/videos", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # 注册路由
@@ -51,6 +53,7 @@ app.include_router(dispute_router)
 app.include_router(order_router)
 app.include_router(review_router)
 app.include_router(admin_router)
+app.include_router(video_router)
 
 
 @app.on_event("startup")
