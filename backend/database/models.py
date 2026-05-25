@@ -173,6 +173,7 @@ class Order(Base):
     checkins = relationship("CheckIn", back_populates="order")
     reviews = relationship("Review", back_populates="order")
     disputes = relationship("Dispute", back_populates="order")
+    videos = relationship("ServiceVideo", back_populates="order")
 
 class CheckIn(Base):
     """服务打卡记录表"""
@@ -223,6 +224,25 @@ class Dispute(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     order = relationship("Order", back_populates="disputes")
+
+class ServiceVideo(Base):
+    """服务视频表"""
+    __tablename__ = "service_videos"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    order_id = Column(Integer, ForeignKey("orders.id"), nullable=False)
+    uploader_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    file_url = Column(String(500), nullable=False)                                # 视频文件路径
+    status = Column(String(20), default="uploaded")                              # uploaded/analyzing/done/failed
+    video_score = Column(Float)                                                   # AI综合评分 0-100
+    analysis_result = Column(Text)                                                # AI分析结果JSON
+    is_locked = Column(Integer, default=0)                                        # 1=纠纷期间锁定
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    order = relationship("Order", back_populates="videos")
+    uploader = relationship("User", foreign_keys=[uploader_id])
+
 
 class ChatRecord(Base):
     """聊天记录表（用于纠纷取证）"""
