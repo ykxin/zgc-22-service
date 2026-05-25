@@ -39,7 +39,11 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    certifications = relationship("Certification", back_populates="user")
+    certifications = relationship(
+        "Certification",
+        back_populates="user",
+        foreign_keys="Certification.user_id",
+    )
     qualification_tags = relationship("ProviderQualificationTag", back_populates="provider")
     orders_as_employer = relationship("Order", foreign_keys="Order.employer_id", back_populates="employer")
     orders_as_worker = relationship("Order", foreign_keys="Order.worker_id", back_populates="worker")
@@ -71,7 +75,11 @@ class Certification(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    user = relationship("User", back_populates="certifications")
+    user = relationship(
+        "User",
+        back_populates="certifications",
+        foreign_keys=[user_id],
+    )
 
 class QualificationTagDefinition(Base):
     """资质标签定义表"""

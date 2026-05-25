@@ -1,5 +1,6 @@
 """AI资质可信标签模块API"""
 import os
+from typing import Optional
 from fastapi import APIRouter, Depends, UploadFile, File, Form
 from sqlalchemy.orm import Session
 
@@ -28,11 +29,11 @@ UPLOAD_DIR = "uploads/certifications"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
-def get_payload(token: str | None):
+def get_payload(token: Optional[str]):
     return decode_access_token(token) if token else None
 
 
-def can_manage_provider(payload: dict | None, provider_id: int) -> bool:
+def can_manage_provider(payload: Optional[dict], provider_id: int) -> bool:
     return bool(payload and (payload.get("role") == "admin" or payload.get("user_id") == provider_id))
 
 
@@ -50,7 +51,7 @@ async def api_upload_cert(
     token: str = Form(...),
     cert_type: str = Form(...),
     file: UploadFile = File(...),
-    declared_doc_name: str | None = Form(None),
+    declared_doc_name: Optional[str] = Form(None),
     db: Session = Depends(get_db),
 ):
     """

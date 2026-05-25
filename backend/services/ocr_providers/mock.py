@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+from typing import Optional
 from datetime import date
 
 
@@ -59,7 +60,7 @@ class MockQualificationOcrProvider:
 
     model_name = "mock-qualification-ocr-v1"
 
-    def extract(self, doc_type: str, image_data: bytes, provider=None, declared_doc_name: str | None = None) -> dict:
+    def extract(self, doc_type: str, image_data: bytes, provider=None, declared_doc_name: Optional[str] = None) -> dict:
         normalized_type = normalize_doc_type(doc_type)
         seed = hashlib.sha256(normalized_type.encode("utf-8") + image_data).hexdigest()
         confidence = 0.84 + (int(seed[:2], 16) % 14) / 100
@@ -127,7 +128,7 @@ class MockQualificationOcrProvider:
         day = int(seed[14:16], 16) % 28 + 1
         return f"{year}-{month:02d}-{day:02d}"
 
-    def _expire_date(self, doc_type: str, seed: str) -> str | None:
+    def _expire_date(self, doc_type: str, seed: str) -> Optional[str]:
         if doc_type in {"background_check_authorization", "no_criminal_record"}:
             return None
         offset = int(seed[16:18], 16) % 5

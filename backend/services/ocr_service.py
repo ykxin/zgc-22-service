@@ -4,7 +4,7 @@ AI只输出结构化字段、候选标签和风险提示，不直接决定最终
 """
 import re
 from datetime import datetime, date
-from typing import Tuple
+from typing import Optional, Tuple
 
 from services.ocr_providers import get_ocr_provider
 from services.ocr_providers.mock import normalize_doc_type
@@ -27,7 +27,7 @@ SUPPORTED_DOC_TYPES = {
 }
 
 
-def recognize_certificate(cert_type: str, image_data: bytes, provider=None, declared_doc_name: str | None = None) -> dict:
+def recognize_certificate(cert_type: str, image_data: bytes, provider=None, declared_doc_name: Optional[str] = None) -> dict:
     """统一证件识别入口，兼容旧cert_type并返回新结构。"""
     if cert_type not in SUPPORTED_DOC_TYPES:
         return {"error": "不支持的证件类型"}
@@ -79,7 +79,7 @@ def verify_certificate_validity(ocr_result: dict) -> Tuple[bool, str]:
     return True, "AI识别完成，等待人工审核"
 
 
-def is_expired(expire_date: str | None) -> bool:
+def is_expired(expire_date: Optional[str]) -> bool:
     if not expire_date:
         return False
     try:

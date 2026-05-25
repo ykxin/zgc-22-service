@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, date, timedelta
-from typing import Any
+from typing import Any, Optional, Tuple
 
 from sqlalchemy.orm import Session
 
@@ -60,7 +60,7 @@ def json_dumps(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
-def json_loads(value: str | None, default):
+def json_loads(value: Optional[str], default):
     if not value:
         return default
     try:
@@ -69,7 +69,7 @@ def json_loads(value: str | None, default):
         return default
 
 
-def mask_cert_number(cert_number: str | None) -> str:
+def mask_cert_number(cert_number: Optional[str]) -> str:
     if not cert_number:
         return ""
     if len(cert_number) <= 8:
@@ -83,8 +83,8 @@ def submit_document(
     cert_type: str,
     image_url: str,
     image_data: bytes,
-    declared_doc_name: str | None = None,
-) -> tuple[Certification | None, dict | None, str | None]:
+    declared_doc_name: Optional[str] = None,
+) -> Tuple[Optional[Certification], Optional[dict], Optional[str]]:
     """Upload a qualification document, run AI extraction, and keep it pending."""
     ocr_result = recognize_certificate(cert_type, image_data, provider=provider, declared_doc_name=declared_doc_name)
     is_valid, verify_msg = verify_certificate_validity(ocr_result)
@@ -234,9 +234,9 @@ def review_document(
     db: Session,
     cert: Certification,
     status: str,
-    reviewer_id: int | None,
-    review_comment: str | None = None,
-    verified_fields: dict | None = None,
+    reviewer_id: Optional[int],
+    review_comment: Optional[str] = None,
+    verified_fields: Optional[dict] = None,
 ) -> dict:
     normalized_status = "passed" if status == "verified" else status
     if normalized_status not in {"passed", "rejected", "expired", "pending"}:
@@ -376,11 +376,11 @@ def upsert_provider_tag(
     tag_code: str,
     status: str,
     trust_level: int,
-    source_type: str | None = None,
-    source_id: int | None = None,
-    confidence: float | None = None,
-    valid_from: str | None = None,
-    valid_until: str | None = None,
+    source_type: Optional[str] = None,
+    source_id: Optional[int] = None,
+    confidence: Optional[float] = None,
+    valid_from: Optional[str] = None,
+    valid_until: Optional[str] = None,
     generated_by: str = "system_rule",
     visible_to_customer: bool = True,
 ) -> ProviderQualificationTag:
@@ -419,7 +419,7 @@ def refresh_expiry_tags(db: Session, provider_id: int):
     db.commit()
 
 
-def get_provider_profile(db: Session, provider_id: int) -> dict | None:
+def get_provider_profile(db: Session, provider_id: int) -> Optional[dict]:
     provider = db.query(User).filter(User.id == provider_id, User.role == "worker").first()
     if not provider:
         return None
@@ -561,7 +561,7 @@ def growth_suggestions(active_tag_codes: set[str]) -> list[dict]:
     return suggestions[:3]
 
 
-def check_eligibility(db: Session, provider_id: int, service_type: str, required_tags: list[str] | None = None) -> dict:
+def check_eligibility(db: Session, provider_id: int, service_type: str, required_tags: Optional[list[str]] = None) -> dict:
     profile = get_provider_profile(db, provider_id)
     if not profile:
         return {"eligible": False, "reasons": ["服务人员不存在"], "missing_tags": required_tags or [], "risk_warnings": []}
@@ -594,7 +594,7 @@ def check_eligibility(db: Session, provider_id: int, service_type: str, required
     }
 
 
-def get_provider_matching_facts(db: Session, provider_id: int, service_type: str | None = None) -> dict | None:
+def get_provider_matching_facts(db: Session, provider_id: int, service_type: Optional[str] = None) -> Optional[dict]:
     """Return DB-backed qualification facts for same-process matching code.
 
     Matching/recommendation should call this function or query the underlying

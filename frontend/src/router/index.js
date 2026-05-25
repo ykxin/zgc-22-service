@@ -14,6 +14,7 @@ const routes = [
   { path: '/worker/cert', name: 'Certification', component: () => import('../views/worker/Certification.vue') },
   { path: '/worker/checkin', name: 'CheckIn', component: () => import('../views/worker/CheckIn.vue') },
   { path: '/worker/orders', name: 'WorkerOrders', component: () => import('../views/worker/WorkerOrders.vue') },
+  { path: '/worker/profile', name: 'WorkerProfile', component: () => import('../views/worker/Profile.vue') },
   // 管理后台
   { path: '/admin/dashboard', name: 'AdminDashboard', component: () => import('../views/admin/AdminDashboard.vue') },
   { path: '/admin/users', name: 'UserManage', component: () => import('../views/admin/UserManage.vue') },

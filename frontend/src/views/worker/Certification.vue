@@ -113,7 +113,7 @@
           <el-descriptions-item
             v-for="(val, key) in ocrResult.extracted_fields || {}"
             :key="key"
-            :label="key"
+            :label="fieldLabel(key)"
           >
             {{ val || '-' }}
           </el-descriptions-item>
@@ -238,5 +238,18 @@ function trustText(level) {
 
 function completenessText(value) {
   return { high: '高', medium: '中', low: '低' }[value] || value
+}
+
+function fieldLabel(key) {
+  return {
+    doc_type: '证件类型',
+    certificate_name: '证件名称',
+    holder_name: '持证人姓名',
+    certificate_no: '证件号码',
+    issuing_authority: '发证机构',
+    issue_date: '签发日期',
+    expire_date: '有效期',
+    level: '等级',
+  }[key] || key
 }
 </script>

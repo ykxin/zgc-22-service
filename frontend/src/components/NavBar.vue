@@ -51,6 +51,7 @@ const menuItems = computed(() => {
       { index: '/worker/orders', label: '我的订单', icon: 'Document' },
       { index: '/worker/cert', label: '资质认证', icon: 'Stamp' },
       { index: '/worker/checkin', label: '服务打卡', icon: 'Checked' },
+      { index: '/worker/profile', label: '个人主页', icon: 'User' },
     ]
   } else if (role === 'admin') {
     return [
