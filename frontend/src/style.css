@@ -1,0 +1,46 @@
+/* 全局样式 */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body, #app { height: 100%; font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif; }
+body { background: #f5f7fa; }
+
+.page-container { padding: 20px; max-width: 1200px; margin: 0 auto; }
+.page-header { margin-bottom: 20px; }
+.page-header h2 { font-size: 22px; color: #303133; }
+.page-header p { color: #909399; font-size: 14px; margin-top: 4px; }
+
+.card-box { background: #fff; border-radius: 8px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+
+.flex-between { display: flex; justify-content: space-between; align-items: center; }
+.flex-center { display: flex; align-items: center; }
+.text-center { text-align: center; }
+.mt-16 { margin-top: 16px; }
+.mb-16 { margin-bottom: 16px; }
+
+/* 登录/注册页 */
+.auth-container {
+  display: flex; justify-content: center; align-items: center;
+  min-height: 100vh; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+.auth-card {
+  width: 420px; background: #fff; border-radius: 12px; padding: 40px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+}
+.auth-card h1 { text-align: center; font-size: 26px; color: #303133; margin-bottom: 8px; }
+.auth-card .subtitle { text-align: center; color: #909399; margin-bottom: 30px; font-size: 14px; }
+
+/* 仪表盘统计卡片 */
+.stat-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; margin-bottom: 20px; }
+.stat-card { background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.stat-card .stat-num { font-size: 32px; font-weight: 700; color: #409eff; }
+.stat-card .stat-label { color: #909399; font-size: 14px; margin-top: 4px; }
+
+/* 匹配得分进度 */
+.match-bar { height: 8px; border-radius: 4px; background: #ebeef5; overflow: hidden; }
+.match-bar-inner { height: 100%; border-radius: 4px; transition: width 0.3s; }
+
+/* 状态标签 */
+.status-pending { color: #e6a23c; background: #fdf6ec; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
+.status-accepted { color: #409eff; background: #ecf5ff; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
+.status-done { color: #67c23a; background: #f0f9eb; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
+.status-completed { color: #67c23a; background: #f0f9eb; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
+.status-cancelled { color: #909399; background: #f4f4f5; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
