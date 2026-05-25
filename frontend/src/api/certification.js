@@ -6,3 +6,5 @@ export const uploadCert = (formData) => request.post('/api/cert/upload', formDat
 })
 export const getCertList = (token) => request.get('/api/cert/list', { params: { token } })
 export const checkExpiring = (token) => request.get('/api/cert/expiring', { params: { token } })
+export const getQualificationProfile = (providerId) =>
+  request.get(`/api/providers/${providerId}/qualification-profile`)
