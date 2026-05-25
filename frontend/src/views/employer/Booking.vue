@@ -47,7 +47,7 @@
       <el-form label-width="80px">
         <el-form-item label="从业者">{{ selected?.nickname }}</el-form-item>
         <el-form-item label="服务日期">
-          <el-date-picker v-model="formDate" type="date" placeholder="选择日期" value-format="YYYY-MM-DD" />
+          <el-date-picker v-model="formDate" type="date" placeholder="选择日期" format="YYYY-MM-DD" />
         </el-form-item>
         <el-form-item label="服务时段">
           <el-select v-model="formTime" placeholder="选择时段">
@@ -81,7 +81,7 @@ const workers = ref([])
 const dialogVisible = ref(false)
 const submitting = ref(false)
 const selected = ref(null)
-const formDate = ref('')
+const formDate = ref(null)
 const formTime = ref('')
 const formRemark = ref('')
 
@@ -94,7 +94,7 @@ async function fetchRecommend() {
 
 function openDialog(row) {
   selected.value = row
-  formDate.value = ''
+  formDate.value = null
   formTime.value = ''
   formRemark.value = ''
   dialogVisible.value = true
@@ -107,10 +107,14 @@ async function handleSubmit() {
   }
   submitting.value = true
   try {
+    const yyyy = formDate.value.getFullYear()
+    const mm = String(formDate.value.getMonth() + 1).padStart(2, '0')
+    const dd = String(formDate.value.getDate()).padStart(2, '0')
+    const serviceDate = `${yyyy}-${mm}-${dd}`
     await createBooking(userStore.token, {
       worker_id: selected.value.worker_id,
       service_category: category.value,
-      service_date: formDate.value,
+      service_date: serviceDate,
       service_time: formTime.value,
       remark: formRemark.value,
     })

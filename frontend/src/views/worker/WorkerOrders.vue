@@ -47,6 +47,31 @@
       />
     </div>
 
+    <!-- 订单详情弹窗 -->
+    <el-dialog v-model="detailVisible" title="订单详情" width="600px">
+      <div v-if="detail">
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="订单编号">{{ detail.order_no }}</el-descriptions-item>
+          <el-descriptions-item label="状态">{{ statusLabel(detail.status) }}</el-descriptions-item>
+          <el-descriptions-item label="服务类别">{{ detail.service_category }}</el-descriptions-item>
+          <el-descriptions-item label="服务日期">{{ detail.service_date }}</el-descriptions-item>
+          <el-descriptions-item label="服务时段">{{ detail.service_time }}</el-descriptions-item>
+          <el-descriptions-item label="价格">{{ detail.price }}</el-descriptions-item>
+          <el-descriptions-item label="地址">{{ detail.address }}</el-descriptions-item>
+          <el-descriptions-item label="备注">{{ detail.remark || '-' }}</el-descriptions-item>
+        </el-descriptions>
+        <h4 style="margin: 16px 0 8px">打卡记录</h4>
+        <el-table :data="detail.checkins || []" size="small">
+          <el-table-column prop="step_name" label="步骤" />
+          <el-table-column prop="step_order" label="序号" width="60" />
+          <el-table-column label="完成" width="60">
+            <template #default="{ row }">{{ row.is_done ? '是' : '否' }}</template>
+          </el-table-column>
+          <el-table-column prop="ai_score" label="AI评分" width="80" />
+        </el-table>
+      </div>
+    </el-dialog>
+
     <!-- 评价弹窗 -->
     <el-dialog v-model="reviewVisible" title="评价雇主" width="400px">
       <el-form>
@@ -102,6 +127,8 @@ const reviewForm = reactive({ order_id: 0, rating: 5, content: '', tags: '' })
 const disputeVisible = ref(false)
 const disputing = ref(false)
 const disputeForm = reactive({ order_id: 0, dispute_type: 'service_quality', description: '' })
+const detailVisible = ref(false)
+const detail = ref(null)
 
 const statusLabel = (s) => ({ pending: '待接单', accepted: '已接单', in_progress: '服务中', done: '待评价', completed: '已完成', cancelled: '已取消' }[s] || s)
 
@@ -143,7 +170,8 @@ async function startService(row) {
 async function viewDetail(row) {
   try {
     const res = await getOrderDetail(row.id, userStore.token)
-    ElMessage.info(JSON.stringify(res.data, null, 2))
+    detail.value = res.data
+    detailVisible.value = true
   } catch { /* ignore */ }
 }
 
